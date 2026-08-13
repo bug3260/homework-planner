@@ -1,0 +1,4 @@
+# user data / runtime
+__pycache__/
+data.json
+*.pyc

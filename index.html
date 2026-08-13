@@ -1,0 +1,921 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ff6fa5">
+<link rel="manifest" href="manifest.webmanifest">
+<title>暑假作业小管家</title>
+<link rel="icon" href="icon-192.png" type="image/png">
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: linear-gradient(160deg, #ffe3ee 0%, #ede9ff 45%, #dff6ff 100%);
+  background-attachment: fixed;
+  color: #3d3a50;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+#app { max-width: 520px; margin: 0 auto; padding: 14px 14px 110px; }
+header { text-align: center; padding: 10px 0 6px; }
+header h1 { font-size: 26px; margin: 2px 0; color: #ff6fa5; letter-spacing: 1px; }
+.slogan { font-size: 13px; color: #8a86a8; }
+.sync-status { text-align: center; font-size: 12px; margin-top: 5px; color: #8a86a8; min-height: 16px; }
+.sync-status.ok { color: #1fa56e; }
+.sync-status.off { color: #e8863a; }
+.sync-status.busy { color: #9a96b4; }
+.page { display: none; }
+.page.active { display: block; animation: fadein .25s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.card { background: rgba(255, 255, 255, .92); border-radius: 20px; padding: 16px; margin-bottom: 14px; box-shadow: 0 6px 18px rgba(141, 124, 255, .14); }
+.card.subj { border-left: 6px solid #8e7cff; }
+.label { font-weight: 700; font-size: 15px; }
+.hint { font-size: 12.5px; color: #8a86a8; margin-top: 8px; line-height: 1.6; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hero { background: linear-gradient(135deg, #ffd9e6, #e8e0ff); }
+.hello { font-size: 20px; font-weight: 800; }
+.sub { font-size: 13px; color: #8a86a8; margin-top: 4px; }
+.big-emoji { font-size: 52px; text-align: center; }
+h2 { font-size: 19px; text-align: center; margin: 6px 0; }
+p { text-align: center; color: #6c6888; font-size: 14px; }
+.bar { height: 14px; background: #efe9ff; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+.bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ff8fab, #8e7cff); transition: width .5s ease; }
+.bar.big { height: 18px; }
+.btn { display: inline-block; border: none; border-radius: 14px; padding: 12px 18px; font-size: 15px; font-weight: 700; cursor: pointer; background: linear-gradient(135deg, #ff8fab, #ff6fa5); color: #fff; box-shadow: 0 4px 12px rgba(255, 111, 165, .35); font-family: inherit; min-height: 44px; }
+.btn:active { transform: scale(.96); }
+.btn.purple { background: linear-gradient(135deg, #9d8cff, #8e7cff); box-shadow: 0 4px 12px rgba(142, 124, 255, .35); }
+.btn.gold { background: linear-gradient(135deg, #ffc94d, #ffb703); box-shadow: 0 4px 12px rgba(255, 183, 3, .35); color: #6b4a00; }
+.btn.ghost { background: #f0edff; color: #8e7cff; box-shadow: none; }
+.btn.small { padding: 8px 14px; font-size: 13px; border-radius: 12px; }
+.btn.block { display: block; width: 100%; margin-top: 12px; }
+.rest-card, .done-card { background: linear-gradient(135deg, #fff6dd, #ffe0ec); }
+.rest-card h2 { color: #e8863a; }
+.done-card h2 { color: #ff6fa5; }
+.welcome { background: linear-gradient(135deg, #ffe9f2, #e8e0ff); }
+.chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.chip.ok { background: #e2f9ee; color: #1fa56e; }
+.chip.need { background: #fff0e6; color: #e8863a; }
+.subj-title { font-weight: 700; font-size: 16px; }
+.emoji { font-size: 20px; margin-right: 4px; }
+.stepper-row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 6px; }
+.stepper { display: flex; align-items: center; gap: 12px; }
+.stepper button { width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 24px; font-weight: 700; cursor: pointer; background: #f0edff; color: #8e7cff; line-height: 1; }
+.stepper button:active { transform: scale(.92); }
+.stepper .val { font-size: 22px; font-weight: 800; min-width: 36px; text-align: center; }
+.target-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.target-label { font-size: 12px; font-weight: 700; color: #8e7cff; background: #f0edff; border: 1px solid #e2dbff; border-radius: 999px; padding: 5px 10px; }
+.target-stepper { display: flex; align-items: center; gap: 6px; }
+.target-btn { width: 44px; height: 44px; border-radius: 12px; border: 2px dashed #c9b8ff; background: #fbfaff; color: #8e7cff; font-size: 18px; font-weight: 700; cursor: pointer; line-height: 1; }
+.target-btn:active { transform: scale(.94); }
+.target-val { min-width: 70px; text-align: center; font-weight: 800; font-size: 14px; color: #6c6888; }
+.target-reset { font-size: 12px; color: #b26a00; background: #fff3e0; border: none; border-radius: 999px; padding: 6px 14px; min-height: 44px; font-weight: 700; cursor: pointer; }
+.warn { background: #fff3e0; color: #b26a00; text-align: center; font-weight: 700; }
+.hint-card { text-align: center; background: linear-gradient(135deg, #e8f9ff, #f0edff); }
+.cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.cal-title { font-weight: 800; font-size: 17px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.cal-wd { text-align: center; font-size: 11px; color: #9a96b4; padding: 2px 0; font-weight: 700; }
+.cal-cell { border-radius: 13px; padding: 6px 2px 7px; text-align: center; cursor: pointer; background: #f7f4ff; border: 2px solid transparent; transition: transform .1s; min-height: 54px; min-width: 0; overflow: hidden; }
+.cal-cell:active { transform: scale(.93); }
+.cal-cell .daynum { font-weight: 800; font-size: 14px; }
+.cal-cell .tag { display: block; max-width: 100%; font-size: 10px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-cell.rest { background: #fff4d1; border-color: #ffd166; }
+.cal-cell.today { border-color: #ff6fa5; background: #ffeef5; }
+.cal-cell.past { color: #b8b4cc; background: #f3f2f7; cursor: default; }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: #8a86a8; }
+.quick-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.stats { display: flex; text-align: center; }
+.stat { flex: 1; }
+.stat .num { font-size: 26px; font-weight: 800; color: #8e7cff; }
+.stat .cap { font-size: 11.5px; color: #8a86a8; }
+.log-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e8e3f5; font-size: 13.5px; }
+.log-row:last-child { border-bottom: none; }
+.subj-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #e8e3f5; }
+.subj-row:last-child { border-bottom: none; }
+.subj-info { flex: 1; }
+input, select { width: 100%; border: 2px solid #e8e3f5; border-radius: 13px; padding: 11px 12px; font-size: 16px; margin-top: 8px; font-family: inherit; color: inherit; background: #fff; }
+input:focus, select:focus { outline: none; border-color: #c9b8ff; }
+.form-row { display: flex; gap: 8px; }
+.form-row input { flex: 1; }
+.form-row select { width: 90px; }
+#emoji-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.emoji-opt { font-size: 22px; background: #f7f4ff; border: 2px solid transparent; border-radius: 12px; padding: 6px 8px; cursor: pointer; min-height: 44px; }
+.emoji-opt.sel { border-color: #ff6fa5; background: #ffeef5; }
+.danger { text-align: center; }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; z-index: 50; }
+.tabbar-inner { display: flex; width: 100%; max-width: 520px; background: #fff; border-radius: 20px 20px 0 0; box-shadow: 0 -4px 20px rgba(0, 0, 0, .09); padding-bottom: env(safe-area-inset-bottom); }
+.tab { flex: 1; border: none; background: none; padding: 8px 4px 12px; font-size: 12px; color: #9a96b4; cursor: pointer; font-family: inherit; }
+.tab .ico { display: block; font-size: 22px; margin-bottom: 2px; }
+.tab.active { color: #ff6fa5; font-weight: 700; }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 99; overflow: hidden; }
+.confetti-piece { position: absolute; top: -24px; width: 10px; height: 16px; border-radius: 3px; animation: confettifall linear forwards; }
+@media (max-width: 380px) {
+  #app { padding: 12px 10px 100px; }
+  .card { padding: 13px; border-radius: 17px; }
+  .cal-grid { gap: 4px; }
+  .cal-cell { min-height: 48px; border-radius: 10px; padding: 5px 1px 6px; }
+  .cal-cell .daynum { font-size: 13px; }
+  .cal-cell .tag { font-size: 9px; }
+  .cal-wd { font-size: 10px; }
+  .cal-title { font-size: 15px; }
+  .btn.small { padding: 8px 10px; font-size: 12px; }
+}
+@keyframes confettifall { to { transform: translateY(110vh) rotate(720deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+<h1>📚 暑假作业小管家</h1>
+<div class="slogan">每天写一点，轻松过暑假！</div>
+<div id="sync-status" class="sync-status" style="display:none"></div>
+</header>
+<main>
+<section id="page-today" class="page active"></section>
+<section id="page-calendar" class="page"></section>
+<section id="page-progress" class="page"></section>
+<section id="page-settings" class="page">
+  <div class="card">
+    <div class="label">🎀 我的名字</div>
+    <input id="set-name" type="text" placeholder="你的小名">
+  </div>
+  <div class="card">
+    <div class="label">🎒 开学日期</div>
+    <input id="set-deadline" type="date">
+    <button id="btn-save-set" class="btn small block">💾 保存信息</button>
+  </div>
+  <div class="card">
+    <div class="label">📚 添加新作业</div>
+    <div id="emoji-picker"></div>
+    <input id="sub-name" type="text" placeholder="作业名称，例如：数学口算">
+    <div class="form-row">
+      <input id="sub-total" type="number" min="1" placeholder="一共多少">
+      <select id="sub-unit">
+        <option>页</option><option>题</option><option>篇</option><option>个</option><option>首</option><option>张</option>
+      </select>
+    </div>
+    <input id="sub-done" type="number" min="0" placeholder="已经写了多少（可以填 0）">
+    <button id="btn-add-sub" class="btn purple small block">➕ 添加这项作业</button>
+  </div>
+  <div class="card">
+    <div class="label">📖 我的作业</div>
+    <div id="sub-list"></div>
+  </div>
+  <div class="card">
+    <div class="label">💡 怎么用</div>
+    <div class="hint">① 在「设置」里填好开学日期和每项作业。<br>② 到「日历」里点日期，选好休息日（🌴）和写作业日（✏️）。<br>③ 每天打开「今日计划」，它会自动算出今天每科要写多少，写完点 ＋ 记录就好啦！<br>④ 在手机 Chrome 菜单里点「添加到主屏幕」，就能像 App 一样用啦！</div>
+  </div>
+  <div class="card danger">
+    <button id="btn-clear" class="btn ghost small">🗑️ 清空所有数据</button>
+  </div>
+</section>
+</main>
+<nav class="tabbar"><div class="tabbar-inner">
+  <button class="tab active" data-target="today"><span class="ico">✏️</span>今日计划</button>
+  <button class="tab" data-target="calendar"><span class="ico">📅</span>日历</button>
+  <button class="tab" data-target="progress"><span class="ico">📊</span>我的进度</button>
+  <button class="tab" data-target="settings"><span class="ico">⚙️</span>设置</button>
+</div></nav>
+</div>
+<div id="confetti"></div>
+<script>
+'use strict';
+
+var STORAGE_KEY = 'summerHomeworkPlanner.v1';
+var EMOJIS = ['📖','📚','✏️','🧮','📝','🎨','🔤','🧪','🎵','🏃'];
+var COLORS = ['#FF8FAB','#8E7CFF','#FFB703','#4ECDC4','#FF6B6B','#5AA9E6','#FF9F68','#8AC926'];
+
+function defaultState() {
+  return { name: '小宝贝', deadline: '2026-09-01', subjects: [], restDays: {}, log: {}, overrides: {}, logEvents: [], updatedAt: 0, hasSynced: false, resetCount: 0 };
+}
+
+var state = defaultState();
+var viewMonth = new Date();
+var selEmoji = 0;
+var wasAllDone = false;
+
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+function fmtDate(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function parseDate(s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function addDays(d, n) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function todayStr() { return fmtDate(new Date()); }
+function nowHM() { var d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function unitOf(sid) { var u = '页'; state.subjects.forEach(function (s) { if (s.id === sid) u = s.unit; }); return u; }
+function todayEventsHTML(sid) {
+  var t = todayStr();
+  var evs = (state.logEvents || []).filter(function (e) { return e.d === t && e.sid === sid; });
+  if (!evs.length) return '';
+  var parts = evs.map(function (e) {
+    var txt = e.n > 0 ? '写了 ' + e.n : '减了 ' + Math.abs(e.n);
+    return (e.t ? '⏰ ' + e.t + ' ' : '') + txt + ' ' + unitOf(sid);
+  });
+  return '<div class="hint">' + parts.join(' · ') + '</div>';
+}
+function daysBetween(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 86400000); }
+function lastWritingDay() { return fmtDate(addDays(parseDate(state.deadline), -1)); }
+function daysUntilSchool() { return Math.max(0, daysBetween(todayStr(), state.deadline)); }
+function isRest(d) { return !!state.restDays[d]; }
+
+function homeworkDaysFrom(startStr) {
+  var n = 0;
+  var cur = parseDate(startStr);
+  var end = parseDate(lastWritingDay());
+  while (cur <= end) {
+    if (!isRest(fmtDate(cur))) n++;
+    cur = addDays(cur, 1);
+  }
+  return n;
+}
+
+function logOn(d, sid) { var rec = state.log[d] || {}; return rec[sid] || 0; }
+
+function setLog(d, sid, n) {
+  var old = logOn(d, sid);
+  var delta = n - old;
+  if (!state.logEvents) state.logEvents = [];
+  if (delta !== 0) state.logEvents.push({ id: uid(), d: d, sid: sid, n: delta, t: nowHM() });
+  if (!state.log[d]) state.log[d] = {};
+  if (n <= 0) {
+    delete state.log[d][sid];
+    if (!Object.keys(state.log[d]).length) delete state.log[d];
+  } else {
+    state.log[d][sid] = n;
+  }
+}
+
+function overrideOn(d, sid) {
+  var day = state.overrides[d];
+  if (!day) return null;
+  var v = day[sid];
+  return (typeof v === 'number' && isFinite(v)) ? v : null;
+}
+
+function setOverride(d, sid, n) {
+  if (!state.overrides[d]) state.overrides[d] = {};
+  state.overrides[d][sid] = n;
+}
+
+function removeOverride(d, sid) {
+  var day = state.overrides[d];
+  if (!day) return;
+  delete day[sid];
+  if (!Object.keys(day).length) delete state.overrides[d];
+}
+
+function loggedBefore(sid, beforeDate) {
+  var sum = 0;
+  Object.keys(state.log).forEach(function (d) {
+    if (beforeDate && d >= beforeDate) return;
+    sum += state.log[d][sid] || 0;
+  });
+  return sum;
+}
+
+function loggedTotal(sid) {
+  var t = todayStr();
+  var sum = 0;
+  Object.keys(state.log).forEach(function (d) {
+    if (d <= t) sum += state.log[d][sid] || 0;
+  });
+  return sum;
+}
+
+function computePlan(dateStr) {
+  var n = homeworkDaysFrom(dateStr);
+  var items = [];
+  state.subjects.forEach(function (s) {
+    var doneToday = logOn(dateStr, s.id);
+    var remainingBefore = Math.max(0, s.total - s.done - loggedBefore(s.id, dateStr));
+    var remaining = Math.max(0, remainingBefore - doneToday);
+    var baseTarget = n > 0 ? Math.min(remainingBefore, Math.ceil(remainingBefore / n)) : remainingBefore;
+    var ov = overrideOn(dateStr, s.id);
+    var target = ov === null ? baseTarget : Math.max(0, Math.min(remainingBefore, Math.round(ov)));
+    items.push({ subject: s, remaining: remaining, target: target, doneToday: doneToday, overridden: ov !== null });
+  });
+  var totalTarget = items.reduce(function (a, i) { return a + i.target; }, 0);
+  var totalDone = items.reduce(function (a, i) { return a + i.doneToday; }, 0);
+  var allDone = items.length > 0 && items.every(function (i) { return i.doneToday >= i.target; });
+  return { date: dateStr, rest: isRest(dateStr), daysLeft: n, items: items, totalTarget: totalTarget, totalDone: totalDone, allDone: allDone };
+}
+
+function nextWorkDay() {
+  var cur = addDays(parseDate(todayStr()), 1);
+  var end = parseDate(lastWritingDay());
+  while (cur <= end) {
+    var ds = fmtDate(cur);
+    if (!isRest(ds)) return ds;
+    cur = addDays(cur, 1);
+  }
+  return null;
+}
+
+function countFutureRest() {
+  var t = todayStr();
+  var n = 0;
+  Object.keys(state.restDays).forEach(function (d) { if (d >= t && d < state.deadline) n++; });
+  return n;
+}
+
+function overall() {
+  var done = 0, total = 0;
+  state.subjects.forEach(function (s) {
+    total += s.total;
+    done += Math.min(s.total, s.done + loggedTotal(s.id));
+  });
+  return { done: done, total: total, pct: total ? Math.round(done / total * 100) : 0 };
+}
+
+function pct(done, total) { if (!total) return 0; return Math.max(0, Math.min(100, Math.round(done / total * 100))); }
+
+function dailyEstimateLabel() {
+  if (!state.subjects.length) return '';
+  var units = {};
+  state.subjects.forEach(function (s) { units[s.unit] = 1; });
+  var keys = Object.keys(units);
+  if (keys.length !== 1) return '✏️ 写';
+  var remaining = state.subjects.reduce(function (a, s) { return a + Math.max(0, s.total - s.done - loggedTotal(s.id)); }, 0);
+  var n = homeworkDaysFrom(todayStr());
+  var per = n > 0 ? Math.ceil(remaining / n) : 0;
+  return per > 0 ? '✏️ 约' + per + keys[0] : '🎉 完成';
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function el(id) { return document.getElementById(id); }
+function uid() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function greeting() { var h = new Date().getHours(); if (h < 5) return '夜深啦'; if (h < 11) return '早上好'; if (h < 14) return '中午好'; if (h < 18) return '下午好'; return '晚上好'; }
+function weekdayCN(d) { return ['日','一','二','三','四','五','六'][d.getDay()]; }
+function cnDate(ds) { var d = parseDate(ds); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+function motivate(p) { if (p >= 100) return '🎉 全部完成，太厉害啦！'; if (p >= 60) return '👏 超过一半啦，继续保持！'; if (p >= 30) return '🌱 好的开始，加油！'; return '🚀 每天一点点，很快就能写完！'; }
+
+function renderToday() {
+  var t = todayStr();
+  var plan = computePlan(t);
+  var d = new Date();
+  var dateLabel = (d.getMonth() + 1) + '月' + d.getDate() + '日 星期' + weekdayCN(d);
+  var html = '<div class="card hero"><div class="hello">' + greeting() + '，' + esc(state.name) + ' 🎀</div>' +
+    '<div class="sub">今天是 ' + dateLabel + ' · 距开学还有 ' + daysUntilSchool() + ' 天</div></div>';
+  if (!state.subjects.length) {
+    html += '<div class="card welcome"><div class="big-emoji">🌈</div><h2>欢迎来到作业小管家！</h2>' +
+      '<p>先把暑假作业和开学日期告诉小管家，它就能帮你算出每天该写多少啦～</p>' +
+      '<button class="btn block" data-nav="settings">📚 去添加作业</button></div>';
+    el('page-today').innerHTML = html;
+    return;
+  }
+  if (plan.rest) {
+    var next = nextWorkDay();
+    var preview = next ? computePlan(next) : null;
+    var previewHtml = '';
+    if (preview) {
+      var parts = preview.items.filter(function (i) { return i.target > 0; })
+        .map(function (i) { return i.subject.emoji + ' ' + esc(i.subject.name) + ' ' + i.target + i.subject.unit; });
+      previewHtml = '<div class="hint">下一个写作业日（' + cnDate(next) + '）要写：' + (parts.length ? parts.join(' · ') : '没有啦，都写完啦！') + '</div>';
+    } else {
+      previewHtml = '<div class="hint">后面没有写作业日啦，好好享受假期吧！</div>';
+    }
+    html += '<div class="card rest-card"><div class="big-emoji">🌴</div><h2>今天是休息日！</h2>' +
+      '<p>好好休息，充好电再出发～</p>' +
+      '<div class="hint">距开学还有 ' + daysUntilSchool() + ' 天 · 之后还有 ' + plan.daysLeft + ' 个写作业日</div>' +
+      previewHtml +
+      '<button class="btn block" data-action="unrest-today">✏️ 改成写作业日</button></div>';
+    el('page-today').innerHTML = html;
+    return;
+  }
+  var allFinished = plan.items.length > 0 && plan.items.every(function (i) { return i.remaining === 0; });
+  var totalRemaining = plan.items.reduce(function (a, i) { return a + i.remaining; }, 0);
+  if (daysUntilSchool() === 0 && totalRemaining > 0) {
+    html += '<div class="card warn">🎒 已经开学啦！作业还剩 ' + totalRemaining + ' 份，要抓紧写完哦！</div>';
+  }
+  if (allFinished) {
+    html += '<div class="card done-card"><div class="big-emoji">🏆</div><h2>全部作业都写完啦！</h2>' +
+      '<p>太厉害了，尽情享受假期吧！🎉</p></div>';
+    el('page-today').innerHTML = html;
+    return;
+  }
+  var targetParts = plan.items.filter(function (i) { return i.target > 0; })
+    .map(function (i) { return i.subject.emoji + ' ' + esc(i.subject.name) + ' ' + i.target + i.subject.unit; });
+  html += '<div class="card"><div class="row-between"><div class="label">今日目标</div>' +
+    '<div class="label">已写 ' + plan.totalDone + ' / ' + plan.totalTarget + '</div></div>' +
+    '<div class="bar"><i style="width:' + pct(plan.totalDone, plan.totalTarget) + '%"></i></div>' +
+    '<div class="hint">' + (targetParts.length ? targetParts.join(' · ') : '今天没有目标啦') + '</div></div>';
+  plan.items.forEach(function (item) {
+    var s = item.subject;
+    var subDone = Math.min(s.total, s.done + loggedTotal(s.id));
+    var need = item.target - item.doneToday;
+    var chip = need > 0 ? '<span class="chip need">还差 ' + need + ' ' + s.unit + '</span>' : '<span class="chip ok">✅ 完成</span>';
+    html += '<div class="card subj" style="border-left:6px solid ' + s.color + '">' +
+      '<div class="row-between"><div class="subj-title"><span class="emoji">' + s.emoji + '</span>' + esc(s.name) + '</div>' + chip + '</div>' +
+      '<div class="hint">还剩 ' + item.remaining + ' ' + s.unit + '</div>' +
+      '<div class="target-row"><span class="target-label">🎯 今天目标</span><div class="target-stepper">' +
+      '<button class="target-btn" data-act="tminus" data-id="' + s.id + '">−</button>' +
+      '<span class="target-val">' + item.target + ' ' + s.unit + '</span>' +
+      '<button class="target-btn" data-act="tplus" data-id="' + s.id + '">＋</button>' +
+      (item.overridden ? '<button class="target-reset" data-act="treset" data-id="' + s.id + '">还原自动</button>' : '') +
+      '</div></div>' +
+      '<div class="stepper-row"><div class="stepper">' +
+      '<button data-act="minus" data-id="' + s.id + '">−</button>' +
+      '<div class="val">' + item.doneToday + '</div>' +
+      '<button data-act="plus" data-id="' + s.id + '">＋</button>' +
+      '</div><div class="hint">' + s.unit + '</div></div>' +
+      todayEventsHTML(s.id) +
+      '<div class="bar"><i style="width:' + pct(subDone, s.total) + '%;background:' + s.color + '"></i></div>' +
+      '<div class="hint">已完成 ' + subDone + ' / ' + s.total + ' ' + s.unit + '</div></div>';
+  });
+  if (plan.allDone) {
+    html += '<div class="card done-card"><div class="big-emoji">🎉</div><h2>今天的作业全部完成！</h2><p>好棒呀！现在可以放心去玩啦～</p></div>';
+  }
+  if (daysUntilSchool() > 0) {
+    html += '<div class="card"><div class="row-between"><div><div class="label">😴 今天想休息？</div>' +
+      '<div class="hint">点一下，作业会自动平摊到后面的写作业日</div></div>' +
+      '<button class="btn ghost" data-action="rest-today">休息一天</button></div></div>';
+  }
+  html += '<div class="card hint-card">💪 距开学还有 ' + daysUntilSchool() + ' 天 · 写作业日还剩 ' + plan.daysLeft + ' 天 · 每天进步一点点！</div>';
+  el('page-today').innerHTML = html;
+}
+
+function onTodayClick(ev) {
+  var btn = ev.target.closest('[data-action],[data-act]');
+  if (!btn) return;
+  if (btn.dataset.action === 'rest-today') {
+    state.restDays[todayStr()] = true;
+    save();
+    renderAll();
+    return;
+  }
+  if (btn.dataset.action === 'unrest-today') {
+    delete state.restDays[todayStr()];
+    save();
+    renderAll();
+    return;
+  }
+  var id = btn.dataset.id;
+  var act = btn.dataset.act;
+  if (!id || !act) return;
+  if (act === 'tplus' || act === 'tminus' || act === 'treset') {
+    var subj = null;
+    state.subjects.forEach(function (s) { if (s.id === id) subj = s; });
+    if (!subj) return;
+    var t = todayStr();
+    var remainingBefore = Math.max(0, subj.total - subj.done - loggedBefore(subj.id, t));
+    var ov = overrideOn(t, id);
+    var curT;
+    if (ov === null) {
+      var n = homeworkDaysFrom(t);
+      curT = n > 0 ? Math.min(remainingBefore, Math.ceil(remainingBefore / n)) : remainingBefore;
+    } else {
+      curT = Math.max(0, Math.min(remainingBefore, Math.round(ov)));
+    }
+    if (act === 'treset') {
+      removeOverride(t, id);
+    } else {
+      setOverride(t, id, Math.max(0, Math.min(remainingBefore, curT + (act === 'tplus' ? 1 : -1))));
+    }
+    save();
+    renderToday();
+    renderProgress();
+    return;
+  }
+  var cur = logOn(todayStr(), id);
+  if (act === 'plus') setLog(todayStr(), id, cur + 1);
+  if (act === 'minus') setLog(todayStr(), id, Math.max(0, cur - 1));
+  save();
+  renderToday();
+  renderProgress();
+  maybeCelebrate(computePlan(todayStr()));
+}
+
+function maybeCelebrate(plan) {
+  if (plan.allDone && !wasAllDone && plan.items.some(function (i) { return i.remaining > 0; })) confetti();
+  wasAllDone = plan.allDone;
+}
+
+function confetti() {
+  var box = el('confetti');
+  var colors = ['#FF8FAB', '#8E7CFF', '#FFB703', '#4ECDC4', '#FF6B6B', '#5AA9E6'];
+  for (var i = 0; i < 70; i++) {
+    var p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDuration = (2 + Math.random() * 2) + 's';
+    p.style.animationDelay = Math.random() * 0.6 + 's';
+    box.appendChild(p);
+    (function (pp) { setTimeout(function () { pp.remove(); }, 4800); })(p);
+  }
+}
+
+function renderCalendar() {
+  var box = el('page-calendar');
+  var y = viewMonth.getFullYear();
+  var m = viewMonth.getMonth();
+  var first = new Date(y, m, 1);
+  var offset = (first.getDay() + 6) % 7;
+  var daysInMonth = new Date(y, m + 1, 0).getDate();
+  var t = todayStr();
+  var deadline = state.deadline;
+  var html = '<div class="card"><div class="cal-head">' +
+    '<button class="btn ghost small" data-cal="prev">‹ 上月</button>' +
+    '<div class="cal-title">' + y + '年' + (m + 1) + '月</div>' +
+    '<button class="btn ghost small" data-cal="next">下月 ›</button></div>' +
+    '<div class="cal-grid">';
+  ['一','二','三','四','五','六','日'].forEach(function (w) { html += '<div class="cal-wd">' + w + '</div>'; });
+  for (var i = 0; i < offset; i++) html += '<div></div>';
+  for (var day = 1; day <= daysInMonth; day++) {
+    var ds = fmtDate(new Date(y, m, day));
+    var cls = 'cal-cell';
+    var tag = '';
+    if (ds === t) cls += ' today';
+    if (ds < t) cls += ' past';
+    if (isRest(ds)) cls += ' rest';
+    if (ds === deadline) tag = '🎒 开学';
+    if (ds === t) tag = isRest(ds) ? '🌴 今天休息' : '🎯 今天';
+    if (!tag && ds > t && ds < deadline) tag = isRest(ds) ? '🌴 休息' : dailyEstimateLabel();
+    if (!tag && ds > deadline) tag = '·';
+    if (!tag && ds < t) tag = '·';
+    var editable = ds >= t && ds < deadline ? '1' : '0';
+    html += '<div class="' + cls + '" data-date="' + ds + '" data-editable="' + editable + '">' +
+      '<div class="daynum">' + day + '</div><div class="tag">' + tag + '</div></div>';
+  }
+  html += '</div><div class="legend">🌴 休息日　✏️ 写作业日　🎒 开学　🎯 今天</div>' +
+    '<div class="quick-row">' +
+    '<button class="btn gold small" data-quick="weekend">🌴 周末都休息</button>' +
+    '<button class="btn purple small" data-quick="allwork">✏️ 每天都写</button></div>' +
+    (countFutureRest() > 0 ? '<div class="hint">点一下日期，就能切换「写作业 / 休息」哦。目前选了 ' + countFutureRest() + ' 个休息日 🌴</div>' : '<div class="hint">点一下日期，就能切换「写作业 / 休息」哦。</div>') +
+    '</div>';
+  box.innerHTML = html;
+}
+
+function onCalendarClick(ev) {
+  var b = ev.target.closest('[data-cal]');
+  if (b) {
+    viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + (b.dataset.cal === 'next' ? 1 : -1), 1);
+    renderCalendar();
+    return;
+  }
+  var q = ev.target.closest('[data-quick]');
+  if (q) {
+    applyQuick(q.dataset.quick);
+    return;
+  }
+  var c = ev.target.closest('.cal-cell[data-editable="1"]');
+  if (!c) return;
+  var ds = c.dataset.date;
+  if (isRest(ds)) delete state.restDays[ds]; else state.restDays[ds] = true;
+  save();
+  renderAll();
+}
+
+function applyQuick(kind) {
+  var cur = parseDate(todayStr());
+  var end = parseDate(lastWritingDay());
+  while (cur <= end) {
+    var ds = fmtDate(cur);
+    var weekend = cur.getDay() === 0 || cur.getDay() === 6;
+    if (kind === 'weekend' && weekend) state.restDays[ds] = true;
+    if (kind === 'allwork') delete state.restDays[ds];
+    cur = addDays(cur, 1);
+  }
+  save();
+  renderAll();
+}
+
+function renderProgress() {
+  var box = el('page-progress');
+  if (!state.subjects.length) {
+    box.innerHTML = '<div class="card welcome"><div class="big-emoji">📚</div><h2>还没有作业哦</h2><p>去「设置」里把暑假作业添加进来吧～</p><button class="btn block" data-nav="settings">去添加作业</button></div>';
+    return;
+  }
+  var o = overall();
+  var html = '<div class="card"><div class="row-between"><div class="label">总进度</div><div class="label">' + o.pct + '%</div></div>' +
+    '<div class="bar big"><i style="width:' + o.pct + '%"></i></div>' +
+    '<div class="hint">已完成 ' + o.done + ' / ' + o.total + ' · ' + motivate(o.pct) + '</div></div>';
+  html += '<div class="card stats">' +
+    '<div class="stat"><div class="num">' + daysUntilSchool() + '</div><div class="cap">距开学（天）</div></div>' +
+    '<div class="stat"><div class="num">' + homeworkDaysFrom(todayStr()) + '</div><div class="cap">写作业日</div></div>' +
+    '<div class="stat"><div class="num">' + countFutureRest() + '</div><div class="cap">休息日</div></div></div>';
+  state.subjects.forEach(function (s) {
+    var done = Math.min(s.total, s.done + loggedTotal(s.id));
+    var left = Math.max(0, s.total - done);
+    html += '<div class="card subj" style="border-left:6px solid ' + s.color + '">' +
+      '<div class="row-between"><div class="subj-title"><span class="emoji">' + s.emoji + '</span>' + esc(s.name) + '</div>' +
+      '<div class="label">' + pct(done, s.total) + '%</div></div>' +
+      '<div class="bar"><i style="width:' + pct(done, s.total) + '%;background:' + s.color + '"></i></div>' +
+      '<div class="hint">已完成 ' + done + ' / ' + s.total + ' ' + s.unit + ' · 还剩 ' + left + ' ' + s.unit + '</div></div>';
+  });
+  html += recentLogHTML();
+  box.innerHTML = html;
+}
+
+function recentLogHTML() {
+  var evs = (state.logEvents || []).slice();
+  evs.sort(function (a, b) {
+    if (a.d !== b.d) return a.d < b.d ? 1 : -1;
+    return a.id < b.id ? 1 : -1;
+  });
+  evs = evs.slice(0, 10);
+  if (!evs.length) return '';
+  var html = '<div class="card"><div class="label">最近记录</div>';
+  evs.forEach(function (e) {
+    var subj = null;
+    state.subjects.forEach(function (s) { if (s.id === e.sid) subj = s; });
+    if (!subj) return;
+    var label = (e.n > 0 ? '写了 ' : '减了 ') + Math.abs(e.n) + ' ' + subj.unit;
+    html += '<div class="log-row"><span>' + cnDate(e.d) + (e.t ? ' ' + e.t : '') + '</span><span>' + subj.emoji + ' ' + esc(subj.name) + ' · ' + label + '</span></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderSettings() {
+  el('set-name').value = state.name;
+  el('set-deadline').value = state.deadline;
+  el('emoji-picker').innerHTML = EMOJIS.map(function (e, i) {
+    return '<button class="emoji-opt' + (i === selEmoji ? ' sel' : '') + '" data-emoji="' + e + '">' + e + '</button>';
+  }).join('');
+  var list = el('sub-list');
+  if (!state.subjects.length) {
+    list.innerHTML = '<div class="hint">还没有添加作业，先在上方添加第一项吧～</div>';
+    return;
+  }
+  list.innerHTML = state.subjects.map(function (s) {
+    var done = Math.min(s.total, s.done + loggedTotal(s.id));
+    return '<div class="subj-row"><span class="emoji">' + s.emoji + '</span>' +
+      '<div class="subj-info"><div>' + esc(s.name) + '</div><div class="hint">已完成 ' + done + ' / ' + s.total + ' ' + s.unit + '</div></div>' +
+      '<button class="btn ghost small" data-del="' + s.id + '">🗑️</button></div>';
+  }).join('');
+}
+
+function bindSettings() {
+  el('emoji-picker').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-emoji]');
+    if (!b) return;
+    selEmoji = EMOJIS.indexOf(b.dataset.emoji);
+    renderSettings();
+  });
+  el('btn-save-set').addEventListener('click', function () {
+    state.name = el('set-name').value.trim() || '小宝贝';
+    var dl = el('set-deadline').value;
+    if (!dl) { alert('请选择开学日期哦～'); return; }
+    state.deadline = dl;
+    save();
+    renderAll();
+  });
+  el('btn-add-sub').addEventListener('click', function () {
+    var name = el('sub-name').value.trim();
+    var total = parseInt(el('sub-total').value, 10);
+    var done = parseInt(el('sub-done').value, 10) || 0;
+    if (!name) { alert('请填写作业名称，例如「数学口算」～'); return; }
+    if (!(total > 0)) { alert('请填写这项作业一共多少' + el('sub-unit').value + '哦（要大于 0）。'); return; }
+    if (done < 0 || done > total) { alert('「已经写了多少」要在 0 和总数之间哦。'); return; }
+    state.subjects.push({
+      id: uid(), name: name, emoji: EMOJIS[selEmoji], color: COLORS[state.subjects.length % COLORS.length],
+      unit: el('sub-unit').value, total: total, done: done
+    });
+    el('sub-name').value = '';
+    el('sub-total').value = '';
+    el('sub-done').value = '';
+    save();
+    renderAll();
+  });
+  el('sub-list').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-del]');
+    if (!b) return;
+    var id = b.dataset.del;
+    if (!confirm('要删除这项作业吗？写过的记录也会一起删掉哦。')) return;
+    state.subjects = state.subjects.filter(function (s) { return s.id !== id; });
+    state.logEvents = (state.logEvents || []).filter(function (e) { return e.sid !== id; });
+    Object.keys(state.log).forEach(function (d) {
+      delete state.log[d][id];
+      if (!Object.keys(state.log[d]).length) delete state.log[d];
+    });
+    Object.keys(state.overrides).forEach(function (d) {
+      delete state.overrides[d][id];
+      if (!Object.keys(state.overrides[d]).length) delete state.overrides[d];
+    });
+    save();
+    renderAll();
+  });
+  el('btn-clear').addEventListener('click', function () {
+    if (!confirm('确定要清空所有数据吗？这个操作不能撤销哦！')) return;
+    var rc = (state.resetCount || 0) + 1;
+    localStorage.removeItem(STORAGE_KEY);
+    state = defaultState();
+    state.resetCount = rc;
+    save();
+    renderAll();
+  });
+}
+
+function save() {
+  state.updatedAt = Date.now();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  syncState.dirty = true;
+  syncSoon();
+}
+function saveLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+function load() {
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    var d = defaultState();
+    var subjects = Array.isArray(s.subjects) ? s.subjects.map(function (x, i) {
+      return {
+        id: x && x.id ? '' + x.id : uid(),
+        name: x && x.name ? '' + x.name : '',
+        emoji: EMOJIS.indexOf(x.emoji) >= 0 ? x.emoji : '📖',
+        color: /^#[0-9a-fA-F]{6}$/.test('' + (x.color || '')) ? x.color : COLORS[i % COLORS.length],
+        unit: x && x.unit ? '' + x.unit : '页',
+        total: Math.max(0, Number(x.total) || 0),
+        done: Math.max(0, Number(x.done) || 0)
+      };
+    }) : [];
+    var log = {};
+    Object.keys(s.log || {}).forEach(function (d) {
+      var rec = {};
+      Object.keys(s.log[d] || {}).forEach(function (id) {
+        var v = Number(s.log[d][id]);
+        if (v > 0) rec[id] = v;
+      });
+      if (Object.keys(rec).length) log[d] = rec;
+    });
+    var overrides = {};
+    var knownIds = {};
+    subjects.forEach(function (x) { knownIds[x.id] = true; });
+    Object.keys(s.overrides || {}).forEach(function (d) {
+      var rec = {};
+      Object.keys(s.overrides[d] || {}).forEach(function (id) {
+        var v = Number(s.overrides[d][id]);
+        if (knownIds[id] && isFinite(v) && v >= 0) rec[id] = Math.round(v);
+      });
+      if (Object.keys(rec).length) overrides[d] = rec;
+    });
+    var logEvents = [];
+    if (Array.isArray(s.logEvents)) {
+      s.logEvents.forEach(function (e) {
+        if (e && e.id && e.d && knownIds[e.sid] && isFinite(Number(e.n)) && Number(e.n) !== 0) {
+          logEvents.push({ id: '' + e.id, d: '' + e.d, sid: '' + e.sid, n: Math.round(Number(e.n)), t: typeof e.t === 'string' && /^\d{1,2}:\d{2}$/.test(e.t) ? e.t : '' });
+        }
+      });
+    } else {
+      Object.keys(log).forEach(function (d2) {
+        Object.keys(log[d2]).forEach(function (id2) {
+          logEvents.push({ id: uid(), d: d2, sid: id2, n: log[d2][id2], t: '' });
+        });
+      });
+    }
+    state = {
+      name: s.name || d.name,
+      deadline: s.deadline || d.deadline,
+      subjects: subjects,
+      restDays: s.restDays && typeof s.restDays === 'object' ? s.restDays : {},
+      log: log,
+      overrides: overrides,
+      logEvents: logEvents,
+      updatedAt: Number(s.updatedAt) || 0,
+      hasSynced: !!s.hasSynced,
+      resetCount: Number(s.resetCount) || 0
+    };
+    if (subjects.length || Object.keys(log).length) {
+      syncState.dirty = true;
+      if (!state.updatedAt) {
+        state.updatedAt = Date.now();
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      }
+    }
+  } catch (e) {}
+}
+
+var syncState = { baseRev: 0, dirty: false, busy: false, enabled: true, timer: null };
+var SYNC_TIMEOUT = 2500;
+
+function syncUrl() {
+  try {
+    var q = new URLSearchParams(location.search).get('sync');
+    if (q) return q;
+  } catch (e) {}
+  if (location.protocol === 'file:') return 'http://127.0.0.1:8000/api/state';
+  return '/api/state';
+}
+
+function setSyncStatus(cls, text) {
+  var box = el('sync-status');
+  if (!box) return;
+  box.className = 'sync-status' + (cls ? ' ' + cls : '');
+  box.textContent = text || '';
+  box.style.display = text ? 'block' : 'none';
+}
+
+function syncSoon() {
+  if (syncState.timer) clearTimeout(syncState.timer);
+  syncState.timer = setTimeout(sync, 800);
+}
+
+function syncFetch(method, body) {
+  return new Promise(function (resolve, reject) {
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, SYNC_TIMEOUT);
+    fetch(syncUrl(), {
+      method: method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) {
+      clearTimeout(to);
+      if (r.status === 404 || r.status === 405) { syncState.enabled = false; setSyncStatus('', ''); reject(new Error('no-sync')); return; }
+      if (!r.ok) { reject(new Error('http')); return; }
+      r.json().then(resolve, function () { reject(new Error('json')); });
+    }, function () { clearTimeout(to); reject(new Error('net')); });
+  });
+}
+
+function hasRealData() {
+  return state.subjects.length > 0 || Object.keys(state.log || {}).length > 0 || (state.logEvents || []).length > 0;
+}
+
+function adopt(res) {
+  if (!res || !res.state) return;
+  var same = JSON.stringify(state) === JSON.stringify(res.state);
+  res.state.hasSynced = true;
+  state = res.state;
+  syncState.baseRev = Number(res.rev) || 0;
+  syncState.dirty = false;
+  saveLocal();
+  if (!same) renderAll();
+  setSyncStatus('ok', '☁️ 已同步 ' + nowHM());
+}
+
+function sync() {
+  if (!syncState.enabled || syncState.busy) return Promise.resolve(null);
+  syncState.busy = true;
+  setSyncStatus('busy', '☁️ 同步中…');
+  var step = syncState.dirty
+    ? syncFetch('PUT', { baseRev: syncState.baseRev, state: state })
+    : syncFetch('GET', null);
+  return step.then(function (res) {
+    if (res && res.state) { adopt(res); return null; }
+    if (res && !res.state && syncState.dirty) {
+      return syncFetch('PUT', { baseRev: syncState.baseRev, state: state }).then(function (res2) { adopt(res2); });
+    }
+    if (res && !res.state) setSyncStatus('', '');
+  }).catch(function (err) {
+    if (err && err.message === 'no-sync') return null;
+    setSyncStatus('off', '📴 离线，已存本机');
+  }).then(function () { syncState.busy = false; });
+}
+
+function showTab(name) {
+  document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
+  el('page-' + name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(function (b) { b.classList.toggle('active', b.dataset.target === name); });
+  if (name === 'calendar') { viewMonth = new Date(); renderCalendar(); }
+  window.scrollTo(0, 0);
+}
+
+function bindNav() {
+  document.querySelectorAll('.tab').forEach(function (btn) {
+    btn.addEventListener('click', function () { showTab(btn.dataset.target); });
+  });
+  document.addEventListener('click', function (ev) {
+    var n = ev.target.closest('[data-nav]');
+    if (n) showTab(n.dataset.nav);
+  });
+}
+
+function renderAll() { renderToday(); renderCalendar(); renderProgress(); renderSettings(); }
+
+function init() {
+  load();
+  bindNav();
+  bindSettings();
+  el('page-today').addEventListener('click', onTodayClick);
+  el('page-calendar').addEventListener('click', onCalendarClick);
+  renderAll();
+  window.hwSyncNow = sync;
+  syncSoon();
+  setInterval(sync, 20000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) sync(); });
+  window.addEventListener('focus', function () { sync(); });
+}
+
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', init);
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
