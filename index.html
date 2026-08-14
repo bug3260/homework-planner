@@ -839,6 +839,7 @@ el('btn-cloud-off').addEventListener('click', function () {
 
 function save() {
   state.updatedAt = Date.now();
+  syncVersion++;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   syncState.dirty = true;
   syncSoon();
@@ -921,6 +922,7 @@ function load() {
 }
 
 var syncState = { baseRev: 0, dirty: false, busy: false, enabled: true, timer: null };
+var syncVersion = 0;
 var SYNC_TIMEOUT = 10000;
 
 function cloudCfg() {
@@ -1066,6 +1068,8 @@ function mergeStates(serverState, incoming) {
   var ssHasData = stateHasData(ss);
   var incHasData = stateHasData(inc);
   if (!(ss.hasSynced && inc.hasSynced)) {
+    if ((inc.resetCount || 0) > (ss.resetCount || 0)) return cloneObj(inc);
+    if ((ss.resetCount || 0) > (inc.resetCount || 0)) return cloneObj(ss);
     var base;
     if (ssHasData && !incHasData) base = ss;
     else if (incHasData && !ssHasData) base = inc;
@@ -1158,8 +1162,10 @@ function hasRealData() {
   return state.subjects.length > 0 || Object.keys(state.log || {}).length > 0 || (state.logEvents || []).length > 0;
 }
 
-function adopt(res) {
+function adopt(res, v, isPull) {
   if (!res || !res.state) return;
+  if (typeof v === 'number' && syncVersion !== v) { syncSoon(); return; }
+  if (isPull && syncState.dirty) { syncSoon(); return; }
   var same = JSON.stringify(state) === JSON.stringify(res.state);
   res.state.hasSynced = true;
   if (res.state.resetCount) setLastServerResetCount(res.state.resetCount);
@@ -1178,16 +1184,19 @@ function adopt(res) {
 }
 
 function sync() {
-  if (!syncState.enabled || syncState.busy) return Promise.resolve(null);
+  if (!syncState.enabled) return Promise.resolve(null);
+  if (syncState.busy) { syncSoon(); return Promise.resolve(null); }
   syncState.busy = true;
   setSyncStatus('busy', '☁️ 同步中…');
+  var v = syncVersion;
+  var wasPull = !syncState.dirty;
   var step = syncState.dirty
     ? syncFetch('PUT', { baseRev: syncState.baseRev, state: state })
     : syncFetch('GET', null);
   return step.then(function (res) {
-    if (res && res.state) { adopt(res); return null; }
+    if (res && res.state) { adopt(res, v, wasPull); return null; }
     if (res && !res.state && syncState.dirty) {
-      return syncFetch('PUT', { baseRev: syncState.baseRev, state: state }).then(function (res2) { adopt(res2); });
+      return syncFetch('PUT', { baseRev: syncState.baseRev, state: state }).then(function (res2) { adopt(res2, v); });
     }
     if (res && !res.state) setSyncStatus('', '');
   }).catch(function (err) {

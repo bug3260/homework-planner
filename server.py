@@ -99,6 +99,10 @@ def merge(server_state, incoming):
     inc_has = state_has_data(inc)
     # 首次接触：有数据的一边胜出（防空设备用新时间戳覆盖云端），两边都有/都没数据时才按 updatedAt
     if not (ss.get('hasSynced') and inc.get('hasSynced')):
+        if (inc.get('resetCount') or 0) > (ss.get('resetCount') or 0):
+            return dict(inc)
+        if (ss.get('resetCount') or 0) > (inc.get('resetCount') or 0):
+            return dict(ss)
         if ss_has and not inc_has:
             base = ss
         elif inc_has and not ss_has:
