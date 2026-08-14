@@ -196,6 +196,7 @@ input:focus, select:focus { outline: none; border-color: #c9b8ff; }
 
 var STORAGE_KEY = 'summerHomeworkPlanner.v1';
 var CLOUD_KEY = 'summerHomeworkPlanner.cloud';
+var META_KEY = 'summerHomeworkPlanner.meta';
 var GIST_API = 'https://api.github.com';
 var GIST_FILE = 'homework-planner-data.json';
 var EMOJIS = ['📖','📚','✏️','🧮','📝','🎨','🔤','🧪','🎵','🏃'];
@@ -712,7 +713,7 @@ function bindSettings() {
   });
   el('btn-clear').addEventListener('click', function () {
     if (!confirm('确定要清空所有数据吗？这个操作不能撤销哦！')) return;
-    var rc = (state.resetCount || 0) + 1;
+    var rc = Math.max(state.resetCount || 0, lastServerResetCount() || 0) + 1;
     localStorage.removeItem(STORAGE_KEY);
     state = defaultState();
     state.resetCount = rc;
@@ -1039,11 +1040,36 @@ function cloneObj(o) {
   for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k];
   return out;
 }
+function stateHasData(st) {
+  if (!st) return false;
+  return !!(st.subjects && st.subjects.length) || !!(st.logEvents && st.logEvents.length) || !!Object.keys(st.log || {}).length;
+}
+function lastServerResetCount() {
+  try {
+    var raw = localStorage.getItem(META_KEY);
+    if (!raw) return 0;
+    var m = JSON.parse(raw);
+    return Number(m.serverResetCount) || 0;
+  } catch (e) { return 0; }
+}
+function setLastServerResetCount(n) {
+  try {
+    var raw = localStorage.getItem(META_KEY);
+    var m = raw ? JSON.parse(raw) : {};
+    m.serverResetCount = Number(n) || 0;
+    localStorage.setItem(META_KEY, JSON.stringify(m));
+  } catch (e) {}
+}
 function mergeStates(serverState, incoming) {
   var ss = serverState || {};
   var inc = incoming || {};
+  var ssHasData = stateHasData(ss);
+  var incHasData = stateHasData(inc);
   if (!(ss.hasSynced && inc.hasSynced)) {
-    var base = (inc.updatedAt || 0) >= (ss.updatedAt || 0) ? inc : ss;
+    var base;
+    if (ssHasData && !incHasData) base = ss;
+    else if (incHasData && !ssHasData) base = inc;
+    else base = (inc.updatedAt || 0) >= (ss.updatedAt || 0) ? inc : ss;
     var m0 = cloneObj(base);
     m0.logEvents = unionEvents(ss.logEvents, inc.logEvents);
     m0 = recomputeLog(m0);
@@ -1052,8 +1078,6 @@ function mergeStates(serverState, incoming) {
   }
   if ((inc.resetCount || 0) > (ss.resetCount || 0)) return cloneObj(inc);
   if ((ss.resetCount || 0) > (inc.resetCount || 0)) return cloneObj(ss);
-  var ssHasData = !!(ss.subjects && ss.subjects.length) || !!(ss.logEvents && ss.logEvents.length) || !!Object.keys(ss.log || {}).length;
-  var incHasData = !!(inc.subjects && inc.subjects.length) || !!(inc.logEvents && inc.logEvents.length) || !!Object.keys(inc.log || {}).length;
   if (ssHasData && !incHasData) return cloneObj(ss);
   var merged = cloneObj(inc);
   merged.logEvents = unionEvents(ss.logEvents, inc.logEvents);
@@ -1070,8 +1094,12 @@ function gistFetch(method, body) {
       var merged;
       if (!incoming) merged = store.state;
       else if (!store.state || baseRev === store.rev) {
-        merged = cloneObj(incoming);
-        merged.hasSynced = true;
+        if (store.state && stateHasData(store.state) && !stateHasData(incoming) && !((incoming.resetCount || 0) > (store.state.resetCount || 0))) {
+          merged = cloneObj(store.state);
+        } else {
+          merged = cloneObj(incoming);
+          merged.hasSynced = true;
+        }
       } else {
         merged = mergeStates(store.state, incoming);
       }
@@ -1134,6 +1162,13 @@ function adopt(res) {
   if (!res || !res.state) return;
   var same = JSON.stringify(state) === JSON.stringify(res.state);
   res.state.hasSynced = true;
+  if (res.state.resetCount) setLastServerResetCount(res.state.resetCount);
+  if (!stateHasData(res.state) && stateHasData(state) && (Number(res.state.resetCount) || 0) <= (state.resetCount || 0)) {
+    syncState.dirty = true;
+    setSyncStatus('off', '📴 云端暂无数据，正在用本机数据恢复…');
+    syncSoon();
+    return;
+  }
   state = res.state;
   syncState.baseRev = Number(res.rev) || 0;
   syncState.dirty = false;

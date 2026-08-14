@@ -88,11 +88,23 @@ def recompute_log(state):
     return state
 
 
+def state_has_data(st):
+    st = st or {}
+    return bool(st.get('subjects')) or bool(st.get('logEvents')) or bool(st.get('log'))
+
+
 def merge(server_state, incoming):
     ss, inc = server_state or {}, incoming or {}
-    # 首次接触（任一方从未同步过）：以 updatedAt 较新一边整体为准，但打卡事件并集不丢
+    ss_has = state_has_data(ss)
+    inc_has = state_has_data(inc)
+    # 首次接触：有数据的一边胜出（防空设备用新时间戳覆盖云端），两边都有/都没数据时才按 updatedAt
     if not (ss.get('hasSynced') and inc.get('hasSynced')):
-        base = inc if (inc.get('updatedAt') or 0) >= (ss.get('updatedAt') or 0) else ss
+        if ss_has and not inc_has:
+            base = ss
+        elif inc_has and not ss_has:
+            base = inc
+        else:
+            base = inc if (inc.get('updatedAt') or 0) >= (ss.get('updatedAt') or 0) else ss
         merged = dict(base)
         merged['logEvents'] = union_events(ss.get('logEvents'), inc.get('logEvents'))
         merged = recompute_log(merged)
@@ -103,9 +115,7 @@ def merge(server_state, incoming):
         return dict(inc)
     if (ss.get('resetCount') or 0) > (inc.get('resetCount') or 0):
         return dict(ss)
-    # 空设备不覆盖有数据的云端（防新装设备反向清空）
-    ss_has = bool(ss.get('subjects')) or bool(ss.get('logEvents')) or bool(ss.get('log'))
-    inc_has = bool(inc.get('subjects')) or bool(inc.get('logEvents')) or bool(inc.get('log'))
+    # 空设备不覆盖有数据的云端
     if ss_has and not inc_has:
         return dict(ss)
     # 常规冲突：打卡事件按 id 并集相加，其余字段以最后到达者为准
@@ -174,8 +184,13 @@ class Handler(BaseHTTPRequestHandler):
         with _lock:
             store = read_store()
             if store['state'] is None or base_rev == store['rev']:
-                merged = dict(incoming)
-                merged['hasSynced'] = True
+                if (store['state'] and state_has_data(store['state'])
+                        and not state_has_data(incoming)
+                        and not (incoming.get('resetCount') or 0) > (store['state'].get('resetCount') or 0)):
+                    merged = dict(store['state'])
+                else:
+                    merged = dict(incoming)
+                    merged['hasSynced'] = True
             else:
                 merged = merge(store['state'], incoming)
             store['state'] = merged
