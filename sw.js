@@ -1,4 +1,4 @@
-var CACHE = 'hw-v2';
+var CACHE = 'hw-v3';
 var ASSETS = [
   './',
   './index.html',
@@ -40,6 +40,7 @@ self.addEventListener('fetch', function (e) {
     }));
     return;
   }
+  if (url.hostname === 'api.github.com') return;
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request).then(function (hit) {

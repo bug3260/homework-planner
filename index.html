@@ -167,6 +167,14 @@ input:focus, select:focus { outline: none; border-color: #c9b8ff; }
     <div id="sub-list"></div>
   </div>
   <div class="card">
+    <div class="label">☁️ 云端同步（电脑关机也能用）</div>
+    <div id="cloud-status" class="hint"></div>
+    <input id="cloud-token" type="password" placeholder="粘贴 GitHub 令牌（github_pat_ 开头）" autocomplete="off">
+    <button id="btn-cloud-connect" class="btn purple small block">🔗 连接云端</button>
+    <button id="btn-cloud-off" class="btn ghost small block">🔌 断开云端</button>
+    <div class="hint">手机和电脑粘贴同一个令牌后自动互通，任何网络都行、电脑不用开机；令牌只保存在本机浏览器，不会上传到仓库。</div>
+  </div>
+  <div class="card">
     <div class="label">💡 怎么用</div>
     <div class="hint">① 在「设置」里填好开学日期和每项作业。<br>② 到「日历」里点日期，选好休息日（🌴）和写作业日（✏️）。<br>③ 每天打开「今日计划」，它会自动算出今天每科要写多少，写完点 ＋ 记录就好啦！<br>④ 在手机 Chrome 菜单里点「添加到主屏幕」，就能像 App 一样用啦！</div>
   </div>
@@ -187,6 +195,9 @@ input:focus, select:focus { outline: none; border-color: #c9b8ff; }
 'use strict';
 
 var STORAGE_KEY = 'summerHomeworkPlanner.v1';
+var CLOUD_KEY = 'summerHomeworkPlanner.cloud';
+var GIST_API = 'https://api.github.com';
+var GIST_FILE = 'homework-planner-data.json';
 var EMOJIS = ['📖','📚','✏️','🧮','📝','🎨','🔤','🧪','🎵','🏃'];
 var COLORS = ['#FF8FAB','#8E7CFF','#FFB703','#4ECDC4','#FF6B6B','#5AA9E6','#FF9F68','#8AC926'];
 
@@ -710,6 +721,66 @@ function bindSettings() {
   });
 }
 
+function cloudStatusText(t) {
+  var box = el('cloud-status');
+  if (box) box.textContent = t || '';
+}
+function cloudConnected() {
+  var cfg = cloudCfg();
+  if (!cfg) {
+    if (el('cloud-token')) el('cloud-token').value = '';
+    cloudStatusText('未连接：在电脑上创建 GitHub 令牌后粘贴到这里（步骤见「使用说明.txt」）。');
+    return;
+  }
+  if (el('cloud-token')) el('cloud-token').value = cfg.token;
+  cloudStatusText('✅ 已连接云端，两端自动同步；断网时先存本机，恢复后自动合并。');
+}
+el('btn-cloud-connect').addEventListener('click', function () {
+  var token = el('cloud-token').value.replace(/^\s+|\s+$/g, '');
+  if (!token) { alert('请先粘贴 GitHub 令牌（github_pat_ 开头）哦～'); return; }
+  var cfg = cloudCfg();
+  cloudStatusText('⏳ 正在连接云端…');
+  var task;
+  if (cfg && cfg.token === token) {
+    task = gistRequest('/gists/' + cfg.gistId).then(function () { return cfg; });
+  } else {
+    var files = {};
+    files[GIST_FILE] = { content: JSON.stringify({ rev: 0, state: null }) };
+    task = gistRequest('/gists', {
+      method: 'POST',
+      body: {
+        description: '暑假作业小管家数据（两端同步用，请勿删除）',
+        public: false,
+        files: files
+      }
+    }).then(function (j) {
+      return { token: token, gistId: '' + j.id };
+    });
+  }
+  task.then(function (c) {
+    cloudSave({ token: c.token, gistId: c.gistId });
+    syncState.enabled = true;
+    syncState.dirty = true;
+    syncState.busy = false;
+    cloudConnected();
+    sync();
+  }).catch(function (err) {
+    if (err && err.code === 'auth') cloudStatusText('❌ 令牌无效，请回到 GitHub 重新复制一遍。');
+    else if (err && err.code === 'forbidden') cloudStatusText('❌ 令牌权限不足：创建令牌时要勾选 Gists 的「读和写」。');
+    else if (err && err.code === 'missing') cloudStatusText('❌ 云端数据仓库不存在，请先「断开云端」再重新连接。');
+    else cloudStatusText('❌ 连接失败：请检查网络后重试。');
+  });
+});
+el('btn-cloud-off').addEventListener('click', function () {
+  if (!confirm('断开云端后，数据只保存在这台设备上，确定吗？')) return;
+  cloudClear();
+  syncState.enabled = true;
+  syncState.dirty = true;
+  syncState.busy = false;
+  cloudConnected();
+  sync();
+});
+
 function save() {
   state.updatedAt = Date.now();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
@@ -796,6 +867,159 @@ function load() {
 var syncState = { baseRev: 0, dirty: false, busy: false, enabled: true, timer: null };
 var SYNC_TIMEOUT = 2500;
 
+function cloudCfg() {
+  try {
+    var raw = localStorage.getItem(CLOUD_KEY);
+    if (!raw) return null;
+    var c = JSON.parse(raw);
+    if (c && typeof c.token === 'string' && c.token && typeof c.gistId === 'string' && c.gistId) return c;
+  } catch (e) {}
+  return null;
+}
+function cloudSave(cfg) {
+  try { localStorage.setItem(CLOUD_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+function cloudClear() {
+  try { localStorage.removeItem(CLOUD_KEY); } catch (e) {}
+}
+function useCloud() {
+  return !!cloudCfg();
+}
+
+function gistRequest(path, opts) {
+  var cfg = cloudCfg();
+  if (!cfg) { var e0 = new Error('no-cloud'); e0.code = 'no-cloud'; return Promise.reject(e0); }
+  var headers = {
+    'Authorization': 'Bearer ' + cfg.token,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+  if (opts && opts.body) headers['Content-Type'] = 'application/json';
+  var ctrl = ('AbortController' in window) ? new AbortController() : null;
+  var to = setTimeout(function () { if (ctrl) ctrl.abort(); }, SYNC_TIMEOUT);
+  return fetch(GIST_API + path, {
+    method: opts && opts.method ? opts.method : 'GET',
+    headers: headers,
+    body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
+    cache: 'no-store',
+    signal: ctrl ? ctrl.signal : undefined
+  }).then(function (r) {
+    clearTimeout(to);
+    if (r.status === 401) { var e1 = new Error('auth'); e1.code = 'auth'; throw e1; }
+    if (r.status === 403) { var e2 = new Error('forbidden'); e2.code = 'forbidden'; throw e2; }
+    if (r.status === 404) { var e3 = new Error('missing'); e3.code = 'missing'; throw e3; }
+    if (!r.ok) { var e4 = new Error('http'); e4.code = 'http'; throw e4; }
+    return r.json();
+  }, function () {
+    clearTimeout(to);
+    var e5 = new Error('net'); e5.code = 'net'; throw e5;
+  });
+}
+
+function parseGistStore(j) {
+  try {
+    var f = j && j.files && j.files[GIST_FILE];
+    if (!f || typeof f.content !== 'string') return { rev: 0, state: null };
+    var c = JSON.parse(f.content);
+    return {
+      rev: Number(c.rev) || 0,
+      state: c.state && typeof c.state === 'object' ? c.state : null
+    };
+  } catch (e) {
+    return { rev: 0, state: null };
+  }
+}
+function gistRead() {
+  var cfg = cloudCfg();
+  return gistRequest('/gists/' + cfg.gistId).then(parseGistStore);
+}
+function gistWrite(rev, st) {
+  var cfg = cloudCfg();
+  var files = {};
+  files[GIST_FILE] = { content: JSON.stringify({ rev: rev, state: st }) };
+  return gistRequest('/gists/' + cfg.gistId, { method: 'PATCH', body: { files: files } }).then(parseGistStore);
+}
+
+function unionEvents(a, b) {
+  var out = [];
+  var seen = {};
+  (a || []).concat(b || []).forEach(function (ev) {
+    if (!ev || typeof ev !== 'object') return;
+    var eid = ev.id;
+    if (!eid || seen[eid]) return;
+    seen[eid] = true;
+    out.push({
+      id: '' + eid,
+      d: '' + (ev.d || ''),
+      sid: '' + (ev.sid || ''),
+      n: parseInt(ev.n, 10) || 0,
+      t: ('' + (ev.t || '')).slice(0, 5)
+    });
+  });
+  return out;
+}
+function recomputeLog(st) {
+  var log = {};
+  (st.logEvents || []).forEach(function (ev) {
+    var d = ev.d, sid = ev.sid, n = ev.n;
+    if (!d || !sid || !n) return;
+    if (!log[d]) log[d] = {};
+    log[d][sid] = (log[d][sid] || 0) + n;
+  });
+  Object.keys(log).forEach(function (d) {
+    Object.keys(log[d]).forEach(function (sid) {
+      if (log[d][sid] <= 0) delete log[d][sid];
+    });
+    if (!Object.keys(log[d]).length) delete log[d];
+  });
+  st.log = log;
+  return st;
+}
+function cloneObj(o) {
+  var out = {};
+  for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k];
+  return out;
+}
+function mergeStates(serverState, incoming) {
+  var ss = serverState || {};
+  var inc = incoming || {};
+  if (!(ss.hasSynced && inc.hasSynced)) {
+    var base = (inc.updatedAt || 0) >= (ss.updatedAt || 0) ? inc : ss;
+    var m0 = cloneObj(base);
+    m0.hasSynced = true;
+    return m0;
+  }
+  if ((inc.resetCount || 0) > (ss.resetCount || 0)) return cloneObj(inc);
+  if ((ss.resetCount || 0) > (inc.resetCount || 0)) return cloneObj(ss);
+  var merged = cloneObj(inc);
+  merged.logEvents = unionEvents(ss.logEvents, inc.logEvents);
+  merged = recomputeLog(merged);
+  merged.hasSynced = true;
+  return merged;
+}
+
+function gistFetch(method, body) {
+  if (method === 'PUT') {
+    return gistRead().then(function (store) {
+      var incoming = body && body.state ? body.state : null;
+      var baseRev = body && Number(body.baseRev) || 0;
+      var merged;
+      if (!incoming) merged = store.state;
+      else if (!store.state || baseRev === store.rev) {
+        merged = cloneObj(incoming);
+        merged.hasSynced = true;
+      } else {
+        merged = mergeStates(store.state, incoming);
+      }
+      return gistWrite(store.rev + 1, merged).then(function (s2) {
+        return { rev: s2.rev, state: s2.state };
+      });
+    });
+  }
+  return gistRead();
+}
+
+
 function syncUrl() {
   try {
     var q = new URLSearchParams(location.search).get('sync');
@@ -819,6 +1043,7 @@ function syncSoon() {
 }
 
 function syncFetch(method, body) {
+  if (useCloud()) return gistFetch(method, body);
   return new Promise(function (resolve, reject) {
     var ctrl = ('AbortController' in window) ? new AbortController() : null;
     var to = setTimeout(function () { if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, SYNC_TIMEOUT);
@@ -850,7 +1075,7 @@ function adopt(res) {
   syncState.dirty = false;
   saveLocal();
   if (!same) renderAll();
-  setSyncStatus('ok', '☁️ 已同步 ' + nowHM());
+  setSyncStatus('ok', (useCloud() ? '☁️ GitHub 已同步 ' : '☁️ 已同步 ') + nowHM());
 }
 
 function sync() {
@@ -868,6 +1093,10 @@ function sync() {
     if (res && !res.state) setSyncStatus('', '');
   }).catch(function (err) {
     if (err && err.message === 'no-sync') return null;
+    if (err && err.code === 'no-cloud') return null;
+    if (err && err.code === 'auth') { setSyncStatus('off', '⚠️ 云端令牌无效，请到「设置」重新连接'); return null; }
+    if (err && err.code === 'forbidden') { setSyncStatus('off', '⚠️ 令牌权限不足（需要 Gists 读写）'); return null; }
+    if (err && err.code === 'missing') { setSyncStatus('off', '⚠️ 云端数据仓库不存在，请到「设置」重新连接'); return null; }
     setSyncStatus('off', '📴 离线，已存本机');
   }).then(function () { syncState.busy = false; });
 }
@@ -896,6 +1125,7 @@ function init() {
   load();
   bindNav();
   bindSettings();
+  cloudConnected();
   el('page-today').addEventListener('click', onTodayClick);
   el('page-calendar').addEventListener('click', onCalendarClick);
   renderAll();
