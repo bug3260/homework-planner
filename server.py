@@ -90,16 +90,23 @@ def recompute_log(state):
 
 def merge(server_state, incoming):
     ss, inc = server_state or {}, incoming or {}
-    # 首次接触（任一方从未同步过）：以 updatedAt 较新一边整体为准
+    # 首次接触（任一方从未同步过）：以 updatedAt 较新一边整体为准，但打卡事件并集不丢
     if not (ss.get('hasSynced') and inc.get('hasSynced')):
         base = inc if (inc.get('updatedAt') or 0) >= (ss.get('updatedAt') or 0) else ss
         merged = dict(base)
+        merged['logEvents'] = union_events(ss.get('logEvents'), inc.get('logEvents'))
+        merged = recompute_log(merged)
         merged['hasSynced'] = True
         return merged
     # 清空数据：resetCount 大者整体胜出
     if (inc.get('resetCount') or 0) > (ss.get('resetCount') or 0):
         return dict(inc)
     if (ss.get('resetCount') or 0) > (inc.get('resetCount') or 0):
+        return dict(ss)
+    # 空设备不覆盖有数据的云端（防新装设备反向清空）
+    ss_has = bool(ss.get('subjects')) or bool(ss.get('logEvents')) or bool(ss.get('log'))
+    inc_has = bool(inc.get('subjects')) or bool(inc.get('logEvents')) or bool(inc.get('log'))
+    if ss_has and not inc_has:
         return dict(ss)
     # 常规冲突：打卡事件按 id 并集相加，其余字段以最后到达者为准
     merged = dict(inc)

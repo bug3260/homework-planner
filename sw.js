@@ -1,4 +1,4 @@
-﻿var CACHE = 'hw-v4';
+﻿var CACHE = 'hw-v5';
 var ASSETS = [
   './',
   './index.html',

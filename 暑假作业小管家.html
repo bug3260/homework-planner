@@ -732,13 +732,38 @@ function cloudConnected() {
     return;
   }
   if (el('cloud-token')) el('cloud-token').value = cfg.token;
-  cloudStatusText('✅ 已连接云端，两端自动同步；断网时先存本机，恢复后自动合并。');
+  cloudStatusText('✅ 已连接云端（数据仓库 ' + cfg.gistId.slice(0, 8) + '…），两端自动同步；断网时先存本机，恢复后自动合并。');
 }
-function cloudConnectTask(token) {
+function cloudDiscover(token) {
   var cfg = cloudCfg();
-  if (cfg && cfg.token === token) {
-    return gistRequest('/gists/' + cfg.gistId).then(function () { return cfg; });
-  }
+  var ids = [];
+  if (cfg && cfg.token === token && cfg.gistId) ids.push(cfg.gistId);
+  return gistRequest('/gists?per_page=100', { token: token }).then(function (list) {
+    var page2 = (list && list.length >= 100)
+      ? gistRequest('/gists?per_page=100&page=2', { token: token })
+      : Promise.resolve([]);
+    return page2.then(function (l2) { return (list || []).concat(l2 || []); });
+  }).then(function (all) {
+    all.forEach(function (g) {
+      if (g && g.files && g.files[GIST_FILE]) {
+        var id = '' + g.id;
+        if (ids.indexOf(id) === -1) ids.push(id);
+      }
+    });
+    return Promise.all(ids.map(function (id) {
+      return gistRequest('/gists/' + id, { token: token }).then(parseGistStore).then(function (st) {
+        return { id: id, rev: st.rev };
+      }, function () { return null; });
+    }));
+  }).then(function (cands) {
+    var best = null;
+    (cands || []).forEach(function (c) {
+      if (c && (!best || c.rev > best.rev)) best = c;
+    });
+    return best ? { token: token, gistId: best.id } : null;
+  });
+}
+function cloudCreateGist(token) {
   var files = {};
   files[GIST_FILE] = { content: JSON.stringify({ rev: 0, state: null }) };
   return gistRequest('/gists', {
@@ -753,6 +778,26 @@ function cloudConnectTask(token) {
     return { token: token, gistId: '' + j.id };
   });
 }
+function cloudConnectTask(token) {
+  return cloudDiscover(token).then(function (found) {
+    return found || cloudCreateGist(token);
+  });
+}
+function cloudAutoPick() {
+  var cfg = cloudCfg();
+  if (!cfg) return;
+  cloudDiscover(cfg.token).then(function (found) {
+    if (!found) return;
+    var now = cloudCfg();
+    if (!now || now.gistId === found.gistId) return;
+    cloudSave({ token: now.token, gistId: found.gistId });
+    syncState.baseRev = 0;
+    syncState.dirty = true;
+    syncState.busy = false;
+    cloudConnected();
+    sync();
+  }, function () {});
+}
 el('btn-cloud-connect').addEventListener('click', function () {
   var token = el('cloud-token').value.replace(/^\s+|\s+$/g, '');
   if (!token) { alert('请先粘贴 GitHub 令牌（github_pat_ 开头）哦～'); return; }
@@ -764,7 +809,9 @@ el('btn-cloud-connect').addEventListener('click', function () {
     }
     throw err;
   }).then(function (c) {
+    var prev = cloudCfg();
     cloudSave({ token: c.token, gistId: c.gistId });
+    if (!prev || prev.gistId !== c.gistId) syncState.baseRev = 0;
     syncState.enabled = true;
     syncState.dirty = true;
     syncState.busy = false;
@@ -997,11 +1044,16 @@ function mergeStates(serverState, incoming) {
   if (!(ss.hasSynced && inc.hasSynced)) {
     var base = (inc.updatedAt || 0) >= (ss.updatedAt || 0) ? inc : ss;
     var m0 = cloneObj(base);
+    m0.logEvents = unionEvents(ss.logEvents, inc.logEvents);
+    m0 = recomputeLog(m0);
     m0.hasSynced = true;
     return m0;
   }
   if ((inc.resetCount || 0) > (ss.resetCount || 0)) return cloneObj(inc);
   if ((ss.resetCount || 0) > (inc.resetCount || 0)) return cloneObj(ss);
+  var ssHasData = !!(ss.subjects && ss.subjects.length) || !!(ss.logEvents && ss.logEvents.length) || !!Object.keys(ss.log || {}).length;
+  var incHasData = !!(inc.subjects && inc.subjects.length) || !!(inc.logEvents && inc.logEvents.length) || !!Object.keys(inc.log || {}).length;
+  if (ssHasData && !incHasData) return cloneObj(ss);
   var merged = cloneObj(inc);
   merged.logEvents = unionEvents(ss.logEvents, inc.logEvents);
   merged = recomputeLog(merged);
@@ -1138,6 +1190,7 @@ function init() {
   bindNav();
   bindSettings();
   cloudConnected();
+  cloudAutoPick();
   el('page-today').addEventListener('click', onTodayClick);
   el('page-calendar').addEventListener('click', onCalendarClick);
   renderAll();
