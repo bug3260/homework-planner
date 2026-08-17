@@ -202,7 +202,7 @@ var EMOJIS = ['📖','📚','✏️','🧮','📝','🎨','🔤','🧪','🎵','
 var COLORS = ['#FF8FAB','#8E7CFF','#FFB703','#4ECDC4','#FF6B6B','#5AA9E6','#FF9F68','#8AC926'];
 
 function defaultState() {
-  return { name: '小宝贝', deadline: '2026-09-01', subjects: [], restDays: {}, log: {}, overrides: {}, logEvents: [], updatedAt: 0, hasSynced: false, resetCount: 0 };
+  return { name: '小宝贝', deadline: '2026-09-01', subjects: [], restDays: {}, log: {}, overrides: {}, logEvents: [], subjectGraves: {}, updatedAt: 0, hasSynced: false, resetCount: 0 };
 }
 
 var state = defaultState();
@@ -684,7 +684,7 @@ function bindSettings() {
     if (done < 0 || done > total) { alert('「已经写了多少」要在 0 和总数之间哦。'); return; }
     state.subjects.push({
       id: uid(), name: name, emoji: EMOJIS[selEmoji], color: COLORS[state.subjects.length % COLORS.length],
-      unit: el('sub-unit').value, total: total, done: done
+      unit: el('sub-unit').value, total: total, done: done, mod: Date.now()
     });
     el('sub-name').value = '';
     el('sub-total').value = '';
@@ -697,6 +697,8 @@ function bindSettings() {
     if (!b) return;
     var id = b.dataset.del;
     if (!confirm('要删除这项作业吗？写过的记录也会一起删掉哦。')) return;
+    state.subjectGraves = state.subjectGraves || {};
+    state.subjectGraves[id] = Date.now();
     state.subjects = state.subjects.filter(function (s) { return s.id !== id; });
     state.logEvents = (state.logEvents || []).filter(function (e) { return e.sid !== id; });
     Object.keys(state.log).forEach(function (d) {
@@ -861,7 +863,8 @@ function load() {
         color: /^#[0-9a-fA-F]{6}$/.test('' + (x.color || '')) ? x.color : COLORS[i % COLORS.length],
         unit: x && x.unit ? '' + x.unit : '页',
         total: Math.max(0, Number(x.total) || 0),
-        done: Math.max(0, Number(x.done) || 0)
+        done: Math.max(0, Number(x.done) || 0),
+        mod: Math.max(0, Number(x && x.mod) || 0)
       };
     }) : [];
     var log = {};
@@ -898,6 +901,13 @@ function load() {
         });
       });
     }
+    var graves = {};
+    if (s.subjectGraves && typeof s.subjectGraves === 'object') {
+      Object.keys(s.subjectGraves).forEach(function (id) {
+        var gv = Number(s.subjectGraves[id]);
+        if (id && isFinite(gv) && gv > 0) graves['' + id] = gv;
+      });
+    }
     state = {
       name: s.name || d.name,
       deadline: s.deadline || d.deadline,
@@ -906,6 +916,7 @@ function load() {
       log: log,
       overrides: overrides,
       logEvents: logEvents,
+      subjectGraves: graves,
       updatedAt: Number(s.updatedAt) || 0,
       hasSynced: !!s.hasSynced,
       resetCount: Number(s.resetCount) || 0
@@ -1043,7 +1054,7 @@ function cloneObj(o) {
 }
 function stateHasData(st) {
   if (!st) return false;
-  return !!(st.subjects && st.subjects.length) || !!(st.logEvents && st.logEvents.length) || !!Object.keys(st.log || {}).length;
+  return !!(st.subjects && st.subjects.length) || !!(st.logEvents && st.logEvents.length) || !!Object.keys(st.log || {}).length || !!Object.keys(st.subjectGraves || {}).length;
 }
 function lastServerResetCount() {
   try {
@@ -1061,6 +1072,66 @@ function setLastServerResetCount(n) {
     localStorage.setItem(META_KEY, JSON.stringify(m));
   } catch (e) {}
 }
+function normSubject(x) {
+  if (!x || typeof x !== 'object' || !x.id) return null;
+  return {
+    id: '' + x.id,
+    name: x.name ? '' + x.name : '',
+    emoji: typeof x.emoji === 'string' ? x.emoji : '📖',
+    color: typeof x.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(x.color) ? x.color : '#8e7cff',
+    unit: x.unit ? '' + x.unit : '页',
+    total: Math.max(0, Number(x.total) || 0),
+    done: Math.max(0, Number(x.done) || 0),
+    mod: Math.max(0, Number(x.mod) || 0)
+  };
+}
+function mergeSubjects(ss, inc) {
+  var best = {};
+  var order = [];
+  function put(x, prefer) {
+    var n = normSubject(x);
+    if (!n) return;
+    if (!best[n.id]) { best[n.id] = n; order.push(n.id); return; }
+    var cur = best[n.id];
+    if (n.mod > cur.mod || (n.mod === cur.mod && prefer)) best[n.id] = n;
+  }
+  (inc.subjects || []).forEach(function (x) { put(x, true); });
+  (ss.subjects || []).forEach(function (x) { put(x, false); });
+  var graves = {};
+  function putGrave(m) {
+    if (!m || typeof m !== 'object') return;
+    Object.keys(m).forEach(function (id) {
+      var v = Math.max(0, Number(m[id]) || 0);
+      if (!id || !v) return;
+      if (!(id in graves) || v > graves[id]) graves[id] = v;
+    });
+  }
+  putGrave(ss.subjectGraves);
+  putGrave(inc.subjectGraves);
+  var subjects = [];
+  order.forEach(function (id) {
+    var sub = best[id];
+    if (graves[id] && graves[id] >= sub.mod) return;
+    subjects.push(sub);
+    delete graves[id];
+  });
+  return { subjects: subjects, subjectGraves: graves };
+}
+function filterForSubjects(st, subjects) {
+  var ids = {};
+  subjects.forEach(function (s) { ids[s.id] = true; });
+  st.logEvents = (st.logEvents || []).filter(function (e) { return ids[e.sid]; });
+  var overrides = {};
+  Object.keys(st.overrides || {}).forEach(function (d) {
+    var rec = {};
+    Object.keys(st.overrides[d] || {}).forEach(function (id) {
+      if (ids[id]) rec[id] = st.overrides[d][id];
+    });
+    if (Object.keys(rec).length) overrides[d] = rec;
+  });
+  st.overrides = overrides;
+  return st;
+}
 function mergeStates(serverState, incoming) {
   var ss = serverState || {};
   var inc = incoming || {};
@@ -1074,7 +1145,11 @@ function mergeStates(serverState, incoming) {
     else if (incHasData && !ssHasData) base = inc;
     else base = (inc.updatedAt || 0) >= (ss.updatedAt || 0) ? inc : ss;
     var m0 = cloneObj(base);
+    var subj0 = mergeSubjects(ss, inc);
+    m0.subjects = subj0.subjects;
+    m0.subjectGraves = subj0.subjectGraves;
     m0.logEvents = unionEvents(ss.logEvents, inc.logEvents);
+    m0 = filterForSubjects(m0, subj0.subjects);
     m0 = recomputeLog(m0);
     m0.hasSynced = true;
     return m0;
@@ -1083,7 +1158,11 @@ function mergeStates(serverState, incoming) {
   if ((ss.resetCount || 0) > (inc.resetCount || 0)) return cloneObj(ss);
   if (ssHasData && !incHasData) return cloneObj(ss);
   var merged = cloneObj(inc);
+  var subj = mergeSubjects(ss, inc);
+  merged.subjects = subj.subjects;
+  merged.subjectGraves = subj.subjectGraves;
   merged.logEvents = unionEvents(ss.logEvents, inc.logEvents);
+  merged = filterForSubjects(merged, subj.subjects);
   merged = recomputeLog(merged);
   merged.hasSynced = true;
   return merged;

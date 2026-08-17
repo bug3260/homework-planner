@@ -6,6 +6,7 @@
 """
 import json
 import os
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -90,7 +91,89 @@ def recompute_log(state):
 
 def state_has_data(st):
     st = st or {}
-    return bool(st.get('subjects')) or bool(st.get('logEvents')) or bool(st.get('log'))
+    return bool(st.get('subjects')) or bool(st.get('logEvents')) or bool(st.get('log')) or bool(st.get('subjectGraves'))
+
+
+def norm_subject(x):
+    if not isinstance(x, dict) or not x.get('id'):
+        return None
+
+    def num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    color = str(x.get('color') or '')
+    return {
+        'id': str(x.get('id')),
+        'name': str(x.get('name') or ''),
+        'emoji': str(x.get('emoji') or '📖'),
+        'color': color if re.match(r'^#[0-9a-fA-F]{6}$', color) else '#8e7cff',
+        'unit': str(x.get('unit') or '页'),
+        'total': max(0, int(num(x.get('total')))),
+        'done': max(0, int(num(x.get('done')))),
+        'mod': max(0, int(num(x.get('mod')))),
+    }
+
+
+def merge_subjects(ss, inc):
+    best = {}
+    order = []
+
+    def put(x, prefer):
+        n = norm_subject(x)
+        if not n:
+            return
+        sid = n['id']
+        if sid not in best:
+            best[sid] = n
+            order.append(sid)
+            return
+        cur = best[sid]
+        if n['mod'] > cur['mod'] or (n['mod'] == cur['mod'] and prefer):
+            best[sid] = n
+
+    for x in (inc.get('subjects') or []):
+        put(x, True)
+    for x in (ss.get('subjects') or []):
+        put(x, False)
+    graves = {}
+    for m in (ss.get('subjectGraves'), inc.get('subjectGraves')):
+        if not isinstance(m, dict):
+            continue
+        for sid, v in m.items():
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                continue
+            if not sid or v <= 0:
+                continue
+            sid = str(sid)
+            if sid not in graves or v > graves[sid]:
+                graves[sid] = v
+    subjects = []
+    for sid in order:
+        sub = best[sid]
+        if sid in graves and graves[sid] >= sub['mod']:
+            continue
+        subjects.append(sub)
+        graves.pop(sid, None)
+    return subjects, graves
+
+
+def filter_for_subjects(state, subjects):
+    ids = set(s['id'] for s in subjects)
+    state['logEvents'] = [e for e in (state.get('logEvents') or []) if isinstance(e, dict) and e.get('sid') in ids]
+    overrides = {}
+    for d, rec in (state.get('overrides') or {}).items():
+        if not isinstance(rec, dict):
+            continue
+        keep = {sid: v for sid, v in rec.items() if sid in ids}
+        if keep:
+            overrides[d] = keep
+    state['overrides'] = overrides
+    return state
 
 
 def merge(server_state, incoming):
@@ -110,7 +193,9 @@ def merge(server_state, incoming):
         else:
             base = inc if (inc.get('updatedAt') or 0) >= (ss.get('updatedAt') or 0) else ss
         merged = dict(base)
+        merged['subjects'], merged['subjectGraves'] = merge_subjects(ss, inc)
         merged['logEvents'] = union_events(ss.get('logEvents'), inc.get('logEvents'))
+        merged = filter_for_subjects(merged, merged['subjects'])
         merged = recompute_log(merged)
         merged['hasSynced'] = True
         return merged
@@ -122,9 +207,11 @@ def merge(server_state, incoming):
     # 空设备不覆盖有数据的云端
     if ss_has and not inc_has:
         return dict(ss)
-    # 常规冲突：打卡事件按 id 并集相加，其余字段以最后到达者为准
+    # 常规冲突：打卡事件按 id 并集相加，其余字段以最后到达者为准；科目按 id 合并、删除用墓碑
     merged = dict(inc)
+    merged['subjects'], merged['subjectGraves'] = merge_subjects(ss, inc)
     merged['logEvents'] = union_events(ss.get('logEvents'), inc.get('logEvents'))
+    merged = filter_for_subjects(merged, merged['subjects'])
     merged = recompute_log(merged)
     merged['hasSynced'] = True
     return merged
